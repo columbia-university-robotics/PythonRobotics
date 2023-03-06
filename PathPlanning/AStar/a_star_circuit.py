@@ -22,7 +22,6 @@ show_animation = True
 
 
 class AStarPlanner:
-
     def __init__(self, ox, oy, resolution, rr):
         """
         Initialize grid map for a star planning
@@ -49,8 +48,15 @@ class AStarPlanner:
             self.parent_index = parent_index
 
         def __str__(self):
-            return str(self.x) + "," + str(self.y) + "," + str(
-                self.cost) + "," + str(self.parent_index)
+            return (
+                str(self.x)
+                + ","
+                + str(self.y)
+                + ","
+                + str(self.cost)
+                + ","
+                + str(self.parent_index)
+            )
 
     def planning(self, sx, sy, gx, gy):
         """
@@ -67,10 +73,18 @@ class AStarPlanner:
             ry: y position list of the final path
         """
 
-        start_node = self.Node(self.calc_xy_index(sx, self.min_x),
-                               self.calc_xy_index(sy, self.min_y), 0.0, -1)
-        goal_node = self.Node(self.calc_xy_index(gx, self.min_x),
-                              self.calc_xy_index(gy, self.min_y), 0.0, -1)
+        start_node = self.Node(
+            self.calc_xy_index(sx, self.min_x),
+            self.calc_xy_index(sy, self.min_y),
+            0.0,
+            -1,
+        )
+        goal_node = self.Node(
+            self.calc_xy_index(gx, self.min_x),
+            self.calc_xy_index(gy, self.min_y),
+            0.0,
+            -1,
+        )
 
         open_set, closed_set = dict(), dict()
         open_set[self.calc_grid_index(start_node)] = start_node
@@ -82,19 +96,23 @@ class AStarPlanner:
 
             c_id = min(
                 open_set,
-                key=lambda o: open_set[o].cost + self.calc_heuristic(goal_node,
-                                                                     open_set[
-                                                                         o]))
+                key=lambda o: open_set[o].cost
+                + self.calc_heuristic(goal_node, open_set[o]),
+            )
             current = open_set[c_id]
 
             # show graph
             if show_animation:  # pragma: no cover
-                plt.plot(self.calc_grid_position(current.x, self.min_x),
-                         self.calc_grid_position(current.y, self.min_y), "xc")
+                plt.plot(
+                    self.calc_grid_position(current.x, self.min_x),
+                    self.calc_grid_position(current.y, self.min_y),
+                    "xc",
+                )
                 # for stopping simulation with the esc key.
-                plt.gcf().canvas.mpl_connect('key_release_event',
-                                             lambda event: [exit(
-                                                 0) if event.key == 'escape' else None])
+                plt.gcf().canvas.mpl_connect(
+                    "key_release_event",
+                    lambda event: [exit(0) if event.key == "escape" else None],
+                )
                 if len(closed_set.keys()) % 10 == 0:
                     plt.pause(0.001)
 
@@ -112,9 +130,12 @@ class AStarPlanner:
 
             # expand_grid search grid based on motion model
             for i, _ in enumerate(self.motion):
-                node = self.Node(current.x + self.motion[i][0],
-                                 current.y + self.motion[i][1],
-                                 current.cost + self.motion[i][2], c_id)
+                node = self.Node(
+                    current.x + self.motion[i][0],
+                    current.y + self.motion[i][1],
+                    current.cost + self.motion[i][2],
+                    c_id,
+                )
                 n_id = self.calc_grid_index(node)
 
                 # If the node is not safe, do nothing
@@ -138,7 +159,8 @@ class AStarPlanner:
     def calc_final_path(self, goal_node, closed_set):
         # generate final course
         rx, ry = [self.calc_grid_position(goal_node.x, self.min_x)], [
-            self.calc_grid_position(goal_node.y, self.min_y)]
+            self.calc_grid_position(goal_node.y, self.min_y)
+        ]
         parent_index = goal_node.parent_index
         while parent_index != -1:
             n = closed_set[parent_index]
@@ -191,7 +213,6 @@ class AStarPlanner:
         return True
 
     def calc_obstacle_map(self, ox, oy):
-
         self.min_x = round(min(ox))
         self.min_y = round(min(oy))
         self.max_x = round(max(ox))
@@ -207,8 +228,9 @@ class AStarPlanner:
         print("y_width:", self.y_width)
 
         # obstacle map generation
-        self.obstacle_map = [[False for _ in range(self.y_width)]
-                             for _ in range(self.x_width)]
+        self.obstacle_map = [
+            [False for _ in range(self.y_width)] for _ in range(self.x_width)
+        ]
         for ix in range(self.x_width):
             x = self.calc_grid_position(ix, self.min_x)
             for iy in range(self.y_width):
@@ -218,17 +240,20 @@ class AStarPlanner:
                     if d <= self.rr:
                         self.obstacle_map[ix][iy] = True
                         break
+
     @staticmethod
     def get_motion_model():
         # dx, dy, cost
-        motion = [[1, 0, 1],
-                  [0, 1, 1],
-                  [-1, 0, 1],
-                  [0, -1, 1],
-                  [-1, -1, math.sqrt(2)],
-                  [-1, 1, math.sqrt(2)],
-                  [1, -1, math.sqrt(2)],
-                  [1, 1, math.sqrt(2)]]
+        motion = [
+            [1, 0, 1],
+            [0, 1, 1],
+            [-1, 0, 1],
+            [0, -1, 1],
+            [-1, -1, math.sqrt(2)],
+            [-1, 1, math.sqrt(2)],
+            [1, -1, math.sqrt(2)],
+            [1, 1, math.sqrt(2)],
+        ]
 
         return motion
 
@@ -236,14 +261,6 @@ class AStarPlanner:
 def main():
     print(__file__ + " start!!")
 
-    # start and goal position
-    sx = 10.0  # [m]
-    sy = 10.0  # [m]
-    gx = 50.0  # [m]
-    gy = 50.0  # [m]
-    grid_size = 2.0  # [m]
-    robot_radius = 1.0  # [m]
- 
     # set obstacle positions
     ox, oy = [], []
     for i in range(20, 60):
@@ -274,59 +291,64 @@ def main():
         ox.append(i)
         oy.append(-20)
 
-    midpoint_x=round((sx+gx)/2)
-    midpoint_y=round((sy+gy)/2)
-    direction=-1
-    slopex=sx-gx # horizontal distance from start to goal
-    slopey=sy-gy # vertical distance from start to goal
-    is_wall=False
-    if slopex>slopey:
-        direction=1 # 1: wall should be vertical
+    # start position
+    sx = 10.0  # [m]
+    sy = 10.0  # [m]
+    yaw = math.pi / 2  # [rad]
+
+    # set goal position
+    gx = sx - (math.cos(yaw)) * 5  # [m]
+    gy = sy - (math.sin(yaw)) * 5  # [m]
+    grid_size = 2.0  # [m]
+    robot_radius = 1.0  # [m]
+
+    midpoint_x = round((sx + gx) / 2)
+    midpoint_y = round((sy + gy) / 2)
+    direction = -1
+    slopex = sx - gx  # horizontal distance from start to goal
+    slopey = sy - gy  # vertical distance from start to goal
+    is_wall = False
+    if slopex > slopey:
+        direction = 1  # 1: wall should be vertical
     else:
-        direction=2 # wall should be horizontal
-    increment=0
-    if direction==2:
-        while is_wall==False:
+        direction = 2  # wall should be horizontal
+    increment = 0
+    if direction == 2:
+        while is_wall == False:
             for i in range(len(ox)):
-                if ox[i]==midpoint_x+increment and oy[i]==midpoint_y:
-                    is_wall=True
-            ox.append(midpoint_x+increment)
+                if ox[i] == midpoint_x + increment and oy[i] == midpoint_y:
+                    is_wall = True
+            ox.append(midpoint_x + increment)
             oy.append(midpoint_y)
-            increment+=1
-        is_wall=False
-        increment=0
-        midpoint_x-=1
-        while is_wall==False:
+            increment += 1
+        is_wall = False
+        increment = 0
+        midpoint_x -= 1
+        while is_wall == False:
             for j in range(len(ox)):
-                if ox[j]==midpoint_x-increment and oy[j]==midpoint_y:
-                    is_wall=True
-            ox.append(midpoint_x-increment)
+                if ox[j] == midpoint_x - increment and oy[j] == midpoint_y:
+                    is_wall = True
+            ox.append(midpoint_x - increment)
             oy.append(midpoint_y)
-            increment+=1
+            increment += 1
     else:
-        while is_wall==False:
+        while is_wall == False:
             for i in range(len(oy)):
-                if ox[i]==midpoint_x and oy[i]==midpoint_y+increment:
-                    is_wall=True
-            ox.append(midpoint_x+increment)
+                if ox[i] == midpoint_x and oy[i] == midpoint_y + increment:
+                    is_wall = True
+            ox.append(midpoint_x + increment)
             oy.append(midpoint_y)
-            increment+=1
-        is_wall=False
-        increment=0
-        midpoint_y-=1
-        while is_wall==False:
+            increment += 1
+        is_wall = False
+        increment = 0
+        midpoint_y -= 1
+        while is_wall == False:
             for j in range(len(oy)):
-                if ox[j]==midpoint_x and oy[j]==midpoint_y-increment:
-                    is_wall=True
-            ox.append(midpoint_x-increment)
+                if ox[j] == midpoint_x and oy[j] == midpoint_y - increment:
+                    is_wall = True
+            ox.append(midpoint_x - increment)
             oy.append(midpoint_y)
-            increment+=1
-
-    a_star = AStarPlanner(ox, oy, grid_size, robot_radius)
-
-    rx, ry = a_star.planning(sx, sy, gx, gy)
-
-
+            increment += 1
 
     if show_animation:  # pragma: no cover
         plt.plot(ox, oy, ".k")
@@ -335,11 +357,16 @@ def main():
         plt.grid(True)
         plt.axis("equal")
 
+    a_star = AStarPlanner(ox, oy, grid_size, robot_radius)
+    rx, ry = a_star.planning(sx, sy, gx, gy)
+
+    print(rx, ry)
+
     if show_animation:  # pragma: no cover
         plt.plot(rx, ry, "-r")
         plt.pause(0.001)
         plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
