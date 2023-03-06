@@ -272,7 +272,7 @@ def main():
     for i in range(-10, 40):
         ox.append(i)
         oy.append(60.0)
-    for i in range(-10, 61):
+    for i in range(-5, 61):
         ox.append(-10.0)
         oy.append(i)
     for i in range(-20, 40):
@@ -297,10 +297,10 @@ def main():
     yaw = math.pi / 2  # [rad]
 
     # set goal position
-    gx = sx - (math.cos(yaw)) * 5  # [m]
-    gy = sy - (math.sin(yaw)) * 5  # [m]
+    gx = sx - (math.cos(yaw)) * 12  # [m]
+    gy = sy - (math.sin(yaw)) * 12  # [m]
     grid_size = 2.0  # [m]
-    robot_radius = 1.0  # [m]
+    robot_radius = 5.0  # [m]
 
     midpoint_x = round((sx + gx) / 2)
     midpoint_y = round((sy + gy) / 2)
@@ -360,7 +360,9 @@ def main():
     a_star = AStarPlanner(ox, oy, grid_size, robot_radius)
     rx, ry = a_star.planning(sx, sy, gx, gy)
 
-    print(rx, ry)
+    # save waypoints to a file
+    np.savetxt("../rx.numpy", np.array(rx))
+    np.savetxt("../ry.numpy", np.array(ry))
 
     if show_animation:  # pragma: no cover
         plt.plot(rx, ry, "-r")

@@ -320,56 +320,10 @@ def generate_target_course(x, y):
 def main():
     print(__file__ + " start!!")
 
-    # # way points (from AStar)
-    # wx = [140.0, 140.0, 130.0, 130.0, 120.0, 120.0, 120.0, 120.0, 120.0, 120.0][::-1]
-    # wy = [210.0, 200.0, 190.0, 180.0, 170.0, 160.0, 150.0, 140.0, 130.0, 120.0][::-1]
-    # way points
-    wx = [
-        10,
-        10,
-        10,
-        30,
-        30,
-        30,
-        50,
-        50,
-        50,
-        50,
-        30,
-        10,
-        -10,
-        -30,
-        -30,
-        -30,
-        -30,
-        -30,
-        -10,
-        10,
-        # 10,
-    ]
-    wy = [
-        10,
-        30,
-        50,
-        50,
-        30,
-        10,
-        10,
-        30,
-        50,
-        70,
-        70,
-        70,
-        70,
-        70,
-        50,
-        30,
-        10,
-        -10,
-        -15,
-        -10,
-        # 10,
-    ]
+    # load way points from a file
+    wx = np.loadtxt("../rx.numpy")[::-4]
+    wy = np.loadtxt("../ry.numpy")[::-4]
+
     # obstacle lists
     # set obstacle positions
     ox, oy = [], []
@@ -382,7 +336,7 @@ def main():
     for i in range(-10, 40, 2):
         ox.append(i)
         oy.append(60.0)
-    for i in range(-10, 61, 2):
+    for i in range(-5, 61, 2):
         ox.append(-10.0)
         oy.append(i)
     for i in range(-20, 40, 2):
