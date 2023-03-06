@@ -32,7 +32,6 @@ class AStarPlanner:
         resolution: grid resolution [m]
         rr: robot radius[m]
         """
-
         self.resolution = resolution
         self.rr = rr
         self.min_x, self.min_y = 0, 0
@@ -219,7 +218,6 @@ class AStarPlanner:
                     if d <= self.rr:
                         self.obstacle_map[ix][iy] = True
                         break
-
     @staticmethod
     def get_motion_model():
         # dx, dy, cost
@@ -276,6 +274,59 @@ def main():
         ox.append(i)
         oy.append(-20)
 
+    midpoint_x=round((sx+gx)/2)
+    midpoint_y=round((sy+gy)/2)
+    direction=-1
+    slopex=sx-gx # horizontal distance from start to goal
+    slopey=sy-gy # vertical distance from start to goal
+    is_wall=False
+    if slopex>slopey:
+        direction=1 # 1: wall should be vertical
+    else:
+        direction=2 # wall should be horizontal
+    increment=0
+    if direction==2:
+        while is_wall==False:
+            for i in range(len(ox)):
+                if ox[i]==midpoint_x+increment and oy[i]==midpoint_y:
+                    is_wall=True
+            ox.append(midpoint_x+increment)
+            oy.append(midpoint_y)
+            increment+=1
+        is_wall=False
+        increment=0
+        midpoint_x-=1
+        while is_wall==False:
+            for j in range(len(ox)):
+                if ox[j]==midpoint_x-increment and oy[j]==midpoint_y:
+                    is_wall=True
+            ox.append(midpoint_x-increment)
+            oy.append(midpoint_y)
+            increment+=1
+    else:
+        while is_wall==False:
+            for i in range(len(oy)):
+                if ox[i]==midpoint_x and oy[i]==midpoint_y+increment:
+                    is_wall=True
+            ox.append(midpoint_x+increment)
+            oy.append(midpoint_y)
+            increment+=1
+        is_wall=False
+        increment=0
+        midpoint_y-=1
+        while is_wall==False:
+            for j in range(len(oy)):
+                if ox[j]==midpoint_x and oy[j]==midpoint_y-increment:
+                    is_wall=True
+            ox.append(midpoint_x-increment)
+            oy.append(midpoint_y)
+            increment+=1
+
+    a_star = AStarPlanner(ox, oy, grid_size, robot_radius)
+
+    rx, ry = a_star.planning(sx, sy, gx, gy)
+
+
 
     if show_animation:  # pragma: no cover
         plt.plot(ox, oy, ".k")
@@ -283,9 +334,6 @@ def main():
         plt.plot(gx, gy, "xb")
         plt.grid(True)
         plt.axis("equal")
-
-    a_star = AStarPlanner(ox, oy, grid_size, robot_radius)
-    rx, ry = a_star.planning(sx, sy, gx, gy)
 
     if show_animation:  # pragma: no cover
         plt.plot(rx, ry, "-r")
