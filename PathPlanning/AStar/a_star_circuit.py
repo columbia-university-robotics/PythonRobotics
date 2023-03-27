@@ -261,35 +261,55 @@ class AStarPlanner:
 def main():
     print(__file__ + " start!!")
 
-    # set obstacle positions
-    ox, oy = [], []
-    for i in range(20, 60):
-        ox.append(i)
-        oy.append(-10.0)
-    for i in range(-10, 80):
-        ox.append(60.0)
-        oy.append(i)
-    for i in range(-10, 40):
-        ox.append(i)
-        oy.append(60.0)
-    for i in range(-5, 61):
-        ox.append(-10.0)
-        oy.append(i)
-    for i in range(-20, 40):
-        ox.append(20.0)
-        oy.append(i)
-    for i in range(0, 40):
-        ox.append(40.0)
-        oy.append(60.0 - i)
-    for i in range(-20, 80):
-        ox.append(-40)
-        oy.append(i)
-    for i in range(-40, 61):
-        ox.append(i)
-        oy.append(80)
-    for i in range(-40, 20):
-        ox.append(i)
-        oy.append(-20)
+    # # set obstacle positions
+    # ox, oy = [], []
+    # for i in range(20, 60):
+    #     ox.append(i)
+    #     oy.append(-10.0)
+    # for i in range(-10, 80):
+    #     ox.append(60.0)
+    #     oy.append(i)
+    # for i in range(-10, 40):
+    #     ox.append(i)
+    #     oy.append(60.0)
+    # for i in range(-5, 61):
+    #     ox.append(-10.0)
+    #     oy.append(i)
+    # for i in range(-20, 40):
+    #     ox.append(20.0)
+    #     oy.append(i)
+    # for i in range(0, 40):
+    #     ox.append(40.0)
+    #     oy.append(60.0 - i)
+    # for i in range(-20, 80):
+    #     ox.append(-40)
+    #     oy.append(i)
+    # for i in range(-40, 61):
+    #     ox.append(i)
+    #     oy.append(80)
+    # for i in range(-40, 20):
+    #     ox.append(i)
+    #     oy.append(-20)
+
+    with open("./map_and_pose/occupancy_grid.npy", "rb") as f:
+        grid = np.load(f)
+    with open("./map_and_pose/map_metadata.npy", "rb") as f:
+        # resolution, width, height
+        map_metadata = np.load(f)
+    with open("./map_and_pose/map_origin.npy", "rb") as f:
+        # position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w
+        map_origin = np.load(f)
+    with open("./map_and_pose/pose.npy", "rb") as f:
+        # position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w
+        pose = np.load(f)
+    print(grid)
+    print(map_metadata)
+    print(map_origin)
+    print(pose)
+
+    return
+
+    # TODO: update occupancy grid so that AStar can use it
 
     # start position
     sx = 10.0  # [m]
