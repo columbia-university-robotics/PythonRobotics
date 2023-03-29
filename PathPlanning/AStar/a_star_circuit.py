@@ -14,6 +14,7 @@ import math
 import matplotlib.pyplot as plt
 
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 from PIL import Image
 
@@ -261,37 +262,7 @@ class AStarPlanner:
 def main():
     print(__file__ + " start!!")
 
-    # # set obstacle positions
-    # ox, oy = [], []
-    # for i in range(20, 60):
-    #     ox.append(i)
-    #     oy.append(-10.0)
-    # for i in range(-10, 80):
-    #     ox.append(60.0)
-    #     oy.append(i)
-    # for i in range(-10, 40):
-    #     ox.append(i)
-    #     oy.append(60.0)
-    # for i in range(-5, 61):
-    #     ox.append(-10.0)
-    #     oy.append(i)
-    # for i in range(-20, 40):
-    #     ox.append(20.0)
-    #     oy.append(i)
-    # for i in range(0, 40):
-    #     ox.append(40.0)
-    #     oy.append(60.0 - i)
-    # for i in range(-20, 80):
-    #     ox.append(-40)
-    #     oy.append(i)
-    # for i in range(-40, 61):
-    #     ox.append(i)
-    #     oy.append(80)
-    # for i in range(-40, 20):
-    #     ox.append(i)
-    #     oy.append(-20)
-
-    with open("./map_and_pose/occupancy_grid.npy", "rb") as f:
+    with open("./map_and_pose/occupancy_grid2.npy", "rb") as f:
         grid = np.load(f)
     with open("./map_and_pose/map_metadata.npy", "rb") as f:
         # resolution, width, height
@@ -302,73 +273,76 @@ def main():
     with open("./map_and_pose/pose.npy", "rb") as f:
         # position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w
         pose = np.load(f)
-    print(grid)
-    print(map_metadata)
-    print(map_origin)
-    print(pose)
 
-    return
-
-    # TODO: update occupancy grid so that AStar can use it
+    # Unpack
+    map_origin_x, map_origin_y, *_ = map_origin
+    map_resolution, map_width, map_height = map_metadata
 
     # start position
-    sx = 10.0  # [m]
-    sy = 10.0  # [m]
-    yaw = math.pi / 2  # [rad]
+    print(pose)
+    # sx = pose[0]
+    # sy = pose[1]
+    sx = -8.7
+    sy = 0.5
+    # rotation = Rotation.from_quat(pose[3:])
+    # _, _, yaw = rotation.as_euler('xyz', degrees=False)
+    yaw = np.pi / 2
 
     # set goal position
-    gx = sx - (math.cos(yaw)) * 12  # [m]
-    gy = sy - (math.sin(yaw)) * 12  # [m]
-    grid_size = 2.0  # [m]
-    robot_radius = 5.0  # [m]
+    scaling_factor = 4
+    gx = sx - (math.cos(yaw)) * scaling_factor
+    gy = sy - (math.sin(yaw)) * scaling_factor
+    grid_size = 0.25
+    robot_radius = 1
+
+    # print(sx, sy, gx, gy)
 
     midpoint_x = round((sx + gx) / 2)
     midpoint_y = round((sy + gy) / 2)
-    direction = -1
-    slopex = sx - gx  # horizontal distance from start to goal
-    slopey = sy - gy  # vertical distance from start to goal
-    is_wall = False
-    if slopex > slopey:
-        direction = 1  # 1: wall should be vertical
+
+    run = sx - gx  # horizontal distance from start to goal
+    rise = sy - gy  # vertical distance from start to goal
+
+    def draw_vertical():
+        i = 0
+        while True:
+            if midpoint_y > len(grid[0]) or grid[midpoint_x][midpoint_y + i] == 100:
+                break
+            grid[midpoint_x][midpoint_y + i] = 100
+            i += 1
+        i = 0
+        while True:
+            if midpoint_y > len(grid[0]) or grid[midpoint_x][midpoint_y - i] == 100:
+                break
+            grid[midpoint_x][midpoint_y - i] = 100
+            i += 1
+
+    def draw_horizontal():
+        i = 0
+        while True:
+            if midpoint_x > len(grid) or grid[midpoint_x + i][midpoint_y] == 100:
+                break
+            grid[midpoint_x + i][midpoint_y] = 100
+            i += 1
+        i = 0
+        while True:
+            if midpoint_x > len(grid) or grid[midpoint_x - i][midpoint_y] == 100:
+                break
+            grid[midpoint_x - i][midpoint_y] = 100
+            i += 1
+
+    if run > rise:
+        draw_vertical()
     else:
-        direction = 2  # wall should be horizontal
-    increment = 0
-    if direction == 2:
-        while is_wall == False:
-            for i in range(len(ox)):
-                if ox[i] == midpoint_x + increment and oy[i] == midpoint_y:
-                    is_wall = True
-            ox.append(midpoint_x + increment)
-            oy.append(midpoint_y)
-            increment += 1
-        is_wall = False
-        increment = 0
-        midpoint_x -= 1
-        while is_wall == False:
-            for j in range(len(ox)):
-                if ox[j] == midpoint_x - increment and oy[j] == midpoint_y:
-                    is_wall = True
-            ox.append(midpoint_x - increment)
-            oy.append(midpoint_y)
-            increment += 1
-    else:
-        while is_wall == False:
-            for i in range(len(oy)):
-                if ox[i] == midpoint_x and oy[i] == midpoint_y + increment:
-                    is_wall = True
-            ox.append(midpoint_x + increment)
-            oy.append(midpoint_y)
-            increment += 1
-        is_wall = False
-        increment = 0
-        midpoint_y -= 1
-        while is_wall == False:
-            for j in range(len(oy)):
-                if ox[j] == midpoint_x and oy[j] == midpoint_y - increment:
-                    is_wall = True
-            ox.append(midpoint_x - increment)
-            oy.append(midpoint_y)
-            increment += 1
+        draw_horizontal()
+
+    # Construct obstacles from grid
+    ob = np.argwhere(grid == 100)
+    down_sample_factor = 50
+    ox, oy = (
+        list(ob[::down_sample_factor, 0] * map_resolution + map_origin_x),
+        list(ob[::down_sample_factor, 1] * map_resolution + map_origin_y),
+    )
 
     if show_animation:  # pragma: no cover
         plt.plot(ox, oy, ".k")
