@@ -285,7 +285,7 @@ def convert_im_to_grid(filepath):
 def main():
     print(__file__ + " start!!")
 
-    with open("./map_and_pose/occupancy_grid2.npy", "rb") as f:
+    with open("./map_and_pose/occupancy_grid.npy", "rb") as f:
         grid = np.load(f)
     with open("./map_and_pose/map_metadata.npy", "rb") as f:
         # resolution, width, height
@@ -299,7 +299,7 @@ def main():
 
     # Unpack
     map_origin_x, map_origin_y, *_ = map_origin
-    map_resolution, map_width, map_height = map_metadata
+    map_resolution, *_ = map_metadata
 
     # start position
     sx = pose[0]
@@ -307,10 +307,10 @@ def main():
     rotation = Rotation.from_quat(pose[3:])
     _, _, yaw = rotation.as_euler("xyz", degrees=False)
 
-    # manually set start pose for testing
-    sx = -2.7
-    sy = -8.7
-    yaw = 0
+    # # manually set start pose for testing
+    # sx = -2.7
+    # sy = -8.7
+    # yaw = 0
 
     # set goal position
     grid_size = 0.25
