@@ -21,10 +21,10 @@ import math
 import sys
 import pathlib
 import time
+
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
-from QuinticPolynomialsPlanner.quintic_polynomials_planner import \
-    QuinticPolynomial
+from QuinticPolynomialsPlanner.quintic_polynomials_planner import QuinticPolynomial
 from CubicSpline import cubic_spline_planner
 
 SIM_LOOP = 500
@@ -54,7 +54,6 @@ show_animation = True
 
 
 class QuarticPolynomial:
-
     def __init__(self, xs, vxs, axs, vxe, axe, time):
         # calc coefficient of quartic polynomial
 
@@ -62,29 +61,31 @@ class QuarticPolynomial:
         self.a1 = vxs
         self.a2 = axs / 2.0
 
-        A = np.array([[3 * time ** 2, 4 * time ** 3],
-                      [6 * time, 12 * time ** 2]])
-        b = np.array([vxe - self.a1 - 2 * self.a2 * time,
-                      axe - 2 * self.a2])
+        A = np.array([[3 * time**2, 4 * time**3], [6 * time, 12 * time**2]])
+        b = np.array([vxe - self.a1 - 2 * self.a2 * time, axe - 2 * self.a2])
         x = np.linalg.solve(A, b)
 
         self.a3 = x[0]
         self.a4 = x[1]
 
     def calc_point(self, t):
-        xt = self.a0 + self.a1 * t + self.a2 * t ** 2 + \
-             self.a3 * t ** 3 + self.a4 * t ** 4
+        xt = (
+            self.a0
+            + self.a1 * t
+            + self.a2 * t**2
+            + self.a3 * t**3
+            + self.a4 * t**4
+        )
 
         return xt
 
     def calc_first_derivative(self, t):
-        xt = self.a1 + 2 * self.a2 * t + \
-             3 * self.a3 * t ** 2 + 4 * self.a4 * t ** 3
+        xt = self.a1 + 2 * self.a2 * t + 3 * self.a3 * t**2 + 4 * self.a4 * t**3
 
         return xt
 
     def calc_second_derivative(self, t):
-        xt = 2 * self.a2 + 6 * self.a3 * t + 12 * self.a4 * t ** 2
+        xt = 2 * self.a2 + 6 * self.a3 * t + 12 * self.a4 * t**2
 
         return xt
 
@@ -95,7 +96,6 @@ class QuarticPolynomial:
 
 
 class FrenetPath:
-
     def __init__(self):
         self.t = []
         self.d = []
@@ -122,7 +122,6 @@ def calc_frenet_paths(c_speed, c_accel, c_d, c_d_d, c_d_dd, s0):
 
     # generate path to each offset goal
     for di in np.arange(-MAX_ROAD_WIDTH, MAX_ROAD_WIDTH, D_ROAD_W):
-
         # Lateral motion planning
         for Ti in np.arange(MIN_T, MAX_T, DT):
             fp = FrenetPath()
@@ -137,8 +136,11 @@ def calc_frenet_paths(c_speed, c_accel, c_d, c_d_d, c_d_dd, s0):
             fp.d_ddd = [lat_qp.calc_third_derivative(t) for t in fp.t]
 
             # Longitudinal motion planning (Velocity keeping)
-            for tv in np.arange(TARGET_SPEED - D_T_S * N_S_SAMPLE,
-                                TARGET_SPEED + D_T_S * N_S_SAMPLE, D_T_S):
+            for tv in np.arange(
+                TARGET_SPEED - D_T_S * N_S_SAMPLE,
+                TARGET_SPEED + D_T_S * N_S_SAMPLE,
+                D_T_S,
+            ):
                 tfp = copy.deepcopy(fp)
                 lon_qp = QuarticPolynomial(s0, c_speed, c_accel, tv, 0.0, Ti)
 
@@ -164,7 +166,6 @@ def calc_frenet_paths(c_speed, c_accel, c_d, c_d_d, c_d_dd, s0):
 
 def calc_global_paths(fplist, csp):
     for fp in fplist:
-
         # calc global positions
         for i in range(len(fp.s)):
             ix, iy = csp.calc_position(fp.s[i])
@@ -196,10 +197,12 @@ def calc_global_paths(fplist, csp):
 
 def check_collision(fp, ob):
     for i in range(len(ob[:, 0])):
-        d = [((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
-             for (ix, iy) in zip(fp.x, fp.y)]
+        d = [
+            ((ix - ob[i, 0]) ** 2 + (iy - ob[i, 1]) ** 2)
+            for (ix, iy) in zip(fp.x, fp.y)
+        ]
 
-        collision = any([di <= ROBOT_RADIUS ** 2 for di in d])
+        collision = any([di <= ROBOT_RADIUS**2 for di in d])
 
         if collision:
             return False
@@ -212,11 +215,13 @@ def check_collision_og(fp, og):
         x = int(ix) + 40
         y = int(iy) + 40
 
-        collision = any([
-            og[x + xf, y + yf]
-            for xf in range(-int(ROBOT_RADIUS) - 1, int(ROBOT_RADIUS) + 2)
-            for yf in range(-int(ROBOT_RADIUS) - 1, int(ROBOT_RADIUS) + 2)
-        ])
+        collision = any(
+            [
+                og[x + xf, y + yf]
+                for xf in range(-int(ROBOT_RADIUS) - 1, int(ROBOT_RADIUS) + 2)
+                for yf in range(-int(ROBOT_RADIUS) - 1, int(ROBOT_RADIUS) + 2)
+            ]
+        )
 
         if collision:
             return False
@@ -232,13 +237,11 @@ def check_paths(fplist, og):
             # print("max speed check fails")
             continue
         # t1 = time.time()
-        if any([abs(a) > MAX_ACCEL for a in
-                  fplist[i].s_dd]):  # Max accel check
+        if any([abs(a) > MAX_ACCEL for a in fplist[i].s_dd]):  # Max accel check
             # print("max accel check fails")
             continue
         # t2 = time.time()
-        if any([abs(c) > MAX_CURVATURE for c in
-                  fplist[i].c]):  # Max curvature check
+        if any([abs(c) > MAX_CURVATURE for c in fplist[i].c]):  # Max curvature check
             # print("max curvature check fails")
             continue
         # t3 = time.time()
@@ -248,7 +251,6 @@ def check_paths(fplist, og):
         # t4 = time.time()
         # print(f"max speed: {(t1 - t0):3f} max accel: {(t2 - t1):3f} max curve: {(t3 - t2):3f} collision: {(t4 - t3):3f}")
         ok_ind.append(i)
-
 
     return [fplist[i] for i in ok_ind]
 
@@ -320,69 +322,49 @@ def generate_target_course(x, y):
 def main():
     print(__file__ + " start!!")
 
-    # load way points from a file
-    wx = np.loadtxt("../rx.numpy")[::-4]
-    wy = np.loadtxt("../ry.numpy")[::-4]
+    # load way points from a file (reverse and downsample)
+    w_d_f = 1  # waypoint downsample factor
+    wx = np.loadtxt("../rx.numpy")[::-w_d_f]
+    wy = np.loadtxt("../ry.numpy")[::-w_d_f]
 
-    # obstacle lists
-    # set obstacle positions
-    ox, oy = [], []
-    for i in range(20, 60, 2):
-        ox.append(i)
-        oy.append(-10.0)
-    for i in range(-10, 80, 2):
-        ox.append(60.0)
-        oy.append(i)
-    for i in range(-10, 40, 2):
-        ox.append(i)
-        oy.append(60.0)
-    for i in range(-5, 61, 2):
-        ox.append(-10.0)
-        oy.append(i)
-    for i in range(-20, 40, 2):
-        ox.append(20.0)
-        oy.append(i)
-    for i in range(0, 40, 2):
-        ox.append(40.0)
-        oy.append(60.0 - i)
-    for i in range(-20, 80, 2):
-        ox.append(-40)
-        oy.append(i)
-    for i in range(-40, 61, 2):
-        ox.append(i)
-        oy.append(80)
-    for i in range(-40, 20, 2):
-        ox.append(i)
-        oy.append(-20)
-    ob = np.stack([ox, oy], axis=-1)
+    # Load map and metadata
+    og = np.load("../AStar/map_and_pose/occupancy_grid2.npy")
+    map_metadata = np.load("../AStar/map_and_pose/map_metadata.npy")
+    map_origin = np.load("../AStar/map_and_pose/map_origin.npy")
 
-    # Add an obstacle in the middle of the track and path
-    ob = np.append(ob, [[30, 65], [29, 64]], axis=0)
+    # Unpack
+    og = np.where(og == 100, 1.0, 0.0)
+    map_origin_x, map_origin_y, *_ = map_origin
+    map_resolution, map_width, _ = map_metadata
 
-    np.savetxt("../ob.numpy", ob)
+    # Construct obstacles from grid for visualization
+    o_d_f = 100  # obstacles_downsample_factor
+    ob = np.argwhere(og == 1.0)
+    ob = np.stack(
+        [
+            ob[:, 0] * map_resolution + map_origin_x,
+            ob[:, 1] * map_resolution + map_origin_y,
+        ],
+        axis=-1,
+    )
+    ob = ob[::o_d_f]
 
-    # create occupancy grid
-    ob_og_x_offset, ob_og_y_offset = 40, 40
-    og = np.zeros((200, 200))
-    for i in range(len(ob)):
-        xi, yi = ob[i]
-        og[int(xi + ob_og_x_offset), int(yi + ob_og_y_offset)] = 1.0
-
-    tx, ty, tyaw, tc, csp = generate_target_course(wx, wy)
+    tx, ty, _, _, csp = generate_target_course(wx, wy)
 
     # initial state
-    c_speed = 0.0 # 10.0 / 3.6  # current speed [m/s]
+    c_speed = 0.0  # 10.0 / 3.6  # current speed [m/s]
     c_accel = 0.0  # current acceleration [m/ss]
-    c_d = 0.0  # current lateral position [m]
+    c_d = 0.0  # current lateral position, in reference to first waypoint [m]
     c_d_d = 0.0  # current lateral speed [m/s]
     c_d_dd = 0.0  # current lateral acceleration [m/s]
-    s0 = 0.0  # current course position
+    s0 = 0  # current course position, in reference to the sequence of positions
 
-    area = 60.0  # animation area length [m]
+    area = map_width * map_resolution / 2  # animation area length [m]
 
     for i in range(SIM_LOOP):
         path = frenet_optimal_planning(
-            csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, og)
+            csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, og
+        )
 
         # Go to next state based on path
         s0 = path.s[1]
@@ -393,8 +375,10 @@ def main():
         c_accel = path.s_dd[1]
 
         vesc_output = (
-            c_speed, # speed TODO: scale to our range
-            path.yaw[1], # yaw (relative to world or starting postion) TODO: scale to our range
+            c_speed,  # speed TODO: scale to our range
+            path.yaw[
+                1
+            ],  # yaw (relative to world or starting postion) TODO: scale to our range
         )
 
         if np.hypot(path.x[1] - tx[-1], path.y[1] - ty[-1]) <= 1.0:
@@ -405,8 +389,9 @@ def main():
             plt.cla()
             # for stopping simulation with the esc key.
             plt.gcf().canvas.mpl_connect(
-                'key_release_event',
-                lambda event: [exit(0) if event.key == 'escape' else None])
+                "key_release_event",
+                lambda event: [exit(0) if event.key == "escape" else None],
+            )
             plt.plot(wx, wy, "-og")
             plt.plot(tx, ty)
             plt.plot(ob[:, 0], ob[:, 1], "xk")
@@ -416,7 +401,7 @@ def main():
             plt.ylim(path.y[1] - area, path.y[1] + area)
             plt.title(f"v[m/s]: {c_speed:0.3f} | yaw: {path.yaw[1]:0.3f}")
             plt.grid(True)
-            plt.pause(0.0001)
+            plt.pause(0.1)
 
     print("Finish")
     if show_animation:  # pragma: no cover
@@ -425,5 +410,5 @@ def main():
         plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
