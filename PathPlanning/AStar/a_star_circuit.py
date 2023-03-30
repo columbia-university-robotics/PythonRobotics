@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 
 show_animation = True
@@ -259,6 +259,29 @@ class AStarPlanner:
         return motion
 
 
+def convert_im_to_grid(filepath):
+    # Open, grayscale, resize image
+    im = Image.open(filepath)
+    im = ImageOps.grayscale(im)
+    im = im.resize((1024, 1024))
+
+    # Convert to numpy array
+    grid = np.asarray(im)
+
+    # Convert all in-between gray to a single value
+    grid = np.where(np.logical_or(grid == 0, grid == 255), grid, 100)
+
+    # Map from colors to occupancy grid
+    #   Black (0) -> free space (0)
+    #   Gray (other) -> obstacle (100)
+    #   While (255) -> unknown (-1)
+    mapping = {0: 0, 100: 100, 255: -1}
+    print(set(grid.flatten()))
+    grid = np.vectorize(mapping.get)(grid)
+
+    return grid
+
+
 def main():
     print(__file__ + " start!!")
 
@@ -279,56 +302,76 @@ def main():
     map_resolution, map_width, map_height = map_metadata
 
     # start position
-    print(pose)
-    # sx = pose[0]
-    # sy = pose[1]
-    sx = -8.7
-    sy = 0.5
-    # rotation = Rotation.from_quat(pose[3:])
-    # _, _, yaw = rotation.as_euler('xyz', degrees=False)
-    yaw = np.pi / 2
+    sx = pose[0]
+    sy = pose[1]
+    rotation = Rotation.from_quat(pose[3:])
+    _, _, yaw = rotation.as_euler("xyz", degrees=False)
+
+    # manually set start pose for testing
+    sx = -2.7
+    sy = -8.7
+    yaw = 0
 
     # set goal position
-    scaling_factor = 4
+    grid_size = 0.25
+    robot_radius = 0.5
+    scaling_factor = robot_radius * 2.25
     gx = sx - (math.cos(yaw)) * scaling_factor
     gy = sy - (math.sin(yaw)) * scaling_factor
-    grid_size = 0.25
-    robot_radius = 1
 
-    # print(sx, sy, gx, gy)
-
-    midpoint_x = round((sx + gx) / 2)
-    midpoint_y = round((sy + gy) / 2)
+    midpoint_x = (sx + gx) / 2
+    midpoint_y = (sy + gy) / 2
 
     run = sx - gx  # horizontal distance from start to goal
     rise = sy - gy  # vertical distance from start to goal
 
+    def point_to_index_x(point):
+        return int((point - map_origin_x) / map_resolution)
+
+    def point_to_index_y(point):
+        return int((point - map_origin_y) / map_resolution)
+
+    midpoint_x_idx = point_to_index_x(midpoint_x)
+    midpoint_y_idx = point_to_index_y(midpoint_y)
+
     def draw_vertical():
-        i = 0
+        i = 1  # start at 1 so that second part of line can start at 0
         while True:
-            if midpoint_y > len(grid[0]) or grid[midpoint_x][midpoint_y + i] == 100:
+            if (
+                midpoint_y_idx + i >= len(grid[0])
+                or grid[midpoint_x_idx][midpoint_y_idx + i] == 100
+            ):
                 break
-            grid[midpoint_x][midpoint_y + i] = 100
+            grid[midpoint_x_idx][midpoint_y_idx + i] = 100
             i += 1
         i = 0
         while True:
-            if midpoint_y > len(grid[0]) or grid[midpoint_x][midpoint_y - i] == 100:
+            if (
+                midpoint_y_idx - i == 0
+                or grid[midpoint_x_idx][midpoint_y_idx - i] == 100
+            ):
                 break
-            grid[midpoint_x][midpoint_y - i] = 100
+            grid[midpoint_x_idx][midpoint_y_idx - i] = 100
             i += 1
 
     def draw_horizontal():
-        i = 0
+        i = 1  # start at 1 so that second part of line can start at 0
         while True:
-            if midpoint_x > len(grid) or grid[midpoint_x + i][midpoint_y] == 100:
+            if (
+                midpoint_x_idx + i >= len(grid)
+                or grid[midpoint_x_idx + i][midpoint_y_idx] == 100
+            ):
                 break
-            grid[midpoint_x + i][midpoint_y] = 100
+            grid[midpoint_x_idx + i][midpoint_y_idx] = 100
             i += 1
         i = 0
         while True:
-            if midpoint_x > len(grid) or grid[midpoint_x - i][midpoint_y] == 100:
+            if (
+                midpoint_x_idx - i == 0
+                or grid[midpoint_x_idx - i][midpoint_y_idx] == 100
+            ):
                 break
-            grid[midpoint_x - i][midpoint_y] = 100
+            grid[midpoint_x_idx - i][midpoint_y_idx] = 100
             i += 1
 
     if run > rise:
@@ -338,16 +381,17 @@ def main():
 
     # Construct obstacles from grid
     ob = np.argwhere(grid == 100)
-    down_sample_factor = 50
+    downsample_factor = 20
     ox, oy = (
-        list(ob[::down_sample_factor, 0] * map_resolution + map_origin_x),
-        list(ob[::down_sample_factor, 1] * map_resolution + map_origin_y),
+        list(ob[::downsample_factor, 0] * map_resolution + map_origin_x),
+        list(ob[::downsample_factor, 1] * map_resolution + map_origin_y),
     )
 
     if show_animation:  # pragma: no cover
         plt.plot(ox, oy, ".k")
         plt.plot(sx, sy, "og")
         plt.plot(gx, gy, "xb")
+        plt.plot(midpoint_x, midpoint_y, "xr")
         plt.grid(True)
         plt.axis("equal")
 
