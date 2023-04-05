@@ -10,6 +10,7 @@ See Wikipedia article (https://en.wikipedia.org/wiki/A*_search_algorithm)
 """
 
 import math
+import time
 
 import matplotlib.pyplot as plt
 
@@ -19,11 +20,11 @@ from scipy.spatial.transform import Rotation
 from PIL import Image, ImageOps
 
 
-show_animation = True
+show_animation = False
 
 
 class AStarPlanner:
-    def __init__(self, ox, oy, resolution, rr):
+    def __init__(self, obstacle_map, resolution, min_x, min_y, max_x, max_y, rr):
         """
         Initialize grid map for a star planning
 
@@ -32,14 +33,16 @@ class AStarPlanner:
         resolution: grid resolution [m]
         rr: robot radius[m]
         """
+        self.obstacle_map = np.where(obstacle_map == 100, True, False)
         self.resolution = resolution
+        self.min_x = min_x
+        self.min_y = min_y
+        self.max_x = max_x
+        self.max_y = max_y
         self.rr = rr
-        self.min_x, self.min_y = 0, 0
-        self.max_x, self.max_y = 0, 0
-        self.obstacle_map = None
-        self.x_width, self.y_width = 0, 0
+        self.x_width = round((self.max_x - self.min_x) / self.resolution)
+        self.y_width = round((self.max_y - self.min_y) / self.resolution)
         self.motion = self.get_motion_model()
-        self.calc_obstacle_map(ox, oy)
 
     class Node:
         def __init__(self, x, y, cost, parent_index):
@@ -208,8 +211,11 @@ class AStarPlanner:
             return False
 
         # collision check
-        if self.obstacle_map[node.x][node.y]:
-            return False
+        squares = math.ceil(self.rr / (self.resolution * 2))
+        for i in range(-squares, squares + 1):
+            for j in range(-squares, squares + 1):
+                if self.obstacle_map[node.x + i][node.y + j]:
+                    return False
 
         return True
 
@@ -276,7 +282,6 @@ def convert_im_to_grid(filepath):
     #   Gray (other) -> obstacle (100)
     #   While (255) -> unknown (-1)
     mapping = {0: 0, 100: 100, 255: -1}
-    print(set(grid.flatten()))
     grid = np.vectorize(mapping.get)(grid)
 
     return grid
@@ -285,21 +290,24 @@ def convert_im_to_grid(filepath):
 def main():
     print(__file__ + " start!!")
 
-    with open("./map_and_pose/occupancy_grid.npy", "rb") as f:
+    with open("./map_and_pose/occupancy_grid_test.npy", "rb") as f:
         grid = np.load(f)
-    with open("./map_and_pose/map_metadata.npy", "rb") as f:
+    with open("./map_and_pose/map_metadata_test.npy", "rb") as f:
         # resolution, width, height
         map_metadata = np.load(f)
-    with open("./map_and_pose/map_origin.npy", "rb") as f:
+    with open("./map_and_pose/map_origin_test.npy", "rb") as f:
         # position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w
         map_origin = np.load(f)
-    with open("./map_and_pose/pose.npy", "rb") as f:
+    with open("./map_and_pose/pose_test.npy", "rb") as f:
         # position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w
         pose = np.load(f)
 
     # Unpack
     map_origin_x, map_origin_y, *_ = map_origin
-    map_resolution, *_ = map_metadata
+    map_resolution, map_width_voxels, map_height_voxels = map_metadata
+    map_resolution = round(map_resolution, 3)
+    map_width_meters = map_width_voxels * map_resolution
+    map_height_meters = map_height_voxels * map_resolution
 
     # start position
     sx = pose[0]
@@ -308,14 +316,12 @@ def main():
     _, _, yaw = rotation.as_euler("xyz", degrees=False)
 
     # # manually set start pose for testing
-    # sx = -2.7
-    # sy = -8.7
-    # yaw = 0
+    sx += 0.25
+    sy -= 0.05
 
     # set goal position
-    grid_size = 0.25
-    robot_radius = 0.5
-    scaling_factor = robot_radius * 2.25
+    robot_radius = 0.22
+    scaling_factor = robot_radius * 2
     gx = sx - (math.cos(yaw)) * scaling_factor
     gy = sy - (math.sin(yaw)) * scaling_factor
 
@@ -381,7 +387,7 @@ def main():
 
     # Construct obstacles from grid
     ob = np.argwhere(grid == 100)
-    downsample_factor = 20
+    downsample_factor = 1
     ox, oy = (
         list(ob[::downsample_factor, 0] * map_resolution + map_origin_x),
         list(ob[::downsample_factor, 1] * map_resolution + map_origin_y),
@@ -395,7 +401,15 @@ def main():
         plt.grid(True)
         plt.axis("equal")
 
-    a_star = AStarPlanner(ox, oy, grid_size, robot_radius)
+    a_star = AStarPlanner(
+        grid,
+        map_resolution,
+        map_origin_x,
+        map_origin_y,
+        map_origin_x + map_width_meters,
+        map_origin_y + map_height_meters,
+        robot_radius,
+    )
     rx, ry = a_star.planning(sx, sy, gx, gy)
 
     # save waypoints to a file
