@@ -21,6 +21,7 @@ import math
 import sys
 import pathlib
 import time
+from scipy.spatial.transform import Rotation
 
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
@@ -30,18 +31,19 @@ from CubicSpline import cubic_spline_planner
 SIM_LOOP = 500
 
 # Parameter
-MAX_SPEED = 50.0 / 3.6  # maximum speed [m/s]
+MAX_SPEED = 2.0  # maximum speed [m/s]
 MAX_ACCEL = 10.0  # maximum acceleration [m/ss] # Increase this value for standing start
-MAX_CURVATURE = 5.0  # maximum curvature [1/m]  # Increase this value to run the demo
+MAX_CURVATURE = 50.0  # maximum curvature [1/m]  # Increase this value to run the demo
 MAX_ROAD_WIDTH = 7.0  # maximum road width [m]
 D_ROAD_W = 1.0  # road width sampling length [m]
 DT = 0.2  # time tick [s]
 MAX_T = 5.0  # max prediction time [m]
 MIN_T = 4.0  # min prediction time [m]
-TARGET_SPEED = 30.0 / 3.6  # target speed [m/s]
+TARGET_SPEED = 2.0  # target speed [m/s]
 D_T_S = 5.0 / 3.6  # target speed sampling length [m/s]
 N_S_SAMPLE = 1  # sampling number of target speed
-ROBOT_RADIUS = 2.0  # robot radius [m]
+ROBOT_RADIUS = 0.1  # robot radius [m]
+DIST_TO_GOAL = 0.1
 
 # cost weights
 K_J = 0.1
@@ -323,22 +325,32 @@ def main():
     print(__file__ + " start!!")
 
     # load way points from a file (reverse and downsample)
-    w_d_f = 1  # waypoint downsample factor
+    w_d_f = 2  # waypoint downsample factor
     wx = np.loadtxt("../rx.numpy")[::-w_d_f]
     wy = np.loadtxt("../ry.numpy")[::-w_d_f]
 
     # Load map and metadata
-    og = np.load("../AStar/map_and_pose/occupancy_grid2.npy")
-    map_metadata = np.load("../AStar/map_and_pose/map_metadata.npy")
-    map_origin = np.load("../AStar/map_and_pose/map_origin.npy")
+    og = np.load("../AStar/map_and_pose/occupancy_grid_test.npy")
+    map_metadata = np.load("../AStar/map_and_pose/map_metadata_test.npy")
+    map_origin = np.load("../AStar/map_and_pose/map_origin_test.npy")
+    pose = np.load("../AStar/map_and_pose/pose_test.npy")
 
     # Unpack
     og = np.where(og == 100, 1.0, 0.0)
     map_origin_x, map_origin_y, *_ = map_origin
     map_resolution, map_width, _ = map_metadata
 
+    # Start position from pose
+    # start position
+    sx = pose[0]
+    sy = pose[1]
+    rotation = Rotation.from_quat(pose[3:])
+    _, _, yaw = rotation.as_euler("xyz", degrees=False)
+    print(sx, sy, yaw)
+    print(wx[0], wy[0])
+
     # Construct obstacles from grid for visualization
-    o_d_f = 100  # obstacles_downsample_factor
+    o_d_f = 10  # obstacles_downsample_factor
     ob = np.argwhere(og == 1.0)
     ob = np.stack(
         [
@@ -360,6 +372,7 @@ def main():
     s0 = 0  # current course position, in reference to the sequence of positions
 
     area = map_width * map_resolution / 2  # animation area length [m]
+    area = 1
 
     for i in range(SIM_LOOP):
         path = frenet_optimal_planning(
@@ -381,7 +394,7 @@ def main():
             ],  # yaw (relative to world or starting postion) TODO: scale to our range
         )
 
-        if np.hypot(path.x[1] - tx[-1], path.y[1] - ty[-1]) <= 1.0:
+        if np.hypot(path.x[1] - tx[-1], path.y[1] - ty[-1]) <= DIST_TO_GOAL:
             print("Goal")
             break
 
@@ -401,7 +414,7 @@ def main():
             plt.ylim(path.y[1] - area, path.y[1] + area)
             plt.title(f"v[m/s]: {c_speed:0.3f} | yaw: {path.yaw[1]:0.3f}")
             plt.grid(True)
-            plt.pause(0.1)
+            plt.pause(1)
 
     print("Finish")
     if show_animation:  # pragma: no cover
