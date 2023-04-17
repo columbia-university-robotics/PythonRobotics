@@ -21,6 +21,7 @@ import math
 import sys
 import pathlib
 import time
+from scipy.spatial.transform import Rotation
 
 # import rospy
 
@@ -335,6 +336,8 @@ class FrenetPlanner:
         self.wy = wy  # y-coord waypoints
 
         self.occ_grid = occ_grid  # occupancy grid
+        self.occ_grid_metadata = np.zeros(3)
+        self.occ_grid_origin = np.zeros(7)
 
         self.show_animation = True
 
@@ -347,14 +350,40 @@ class FrenetPlanner:
 
     def _map_callback(self, data):
         """ """
-        pass
         # TODO Fit the map data to the self.occ_grid data structure
+        self.occ_grid = np.array(data.data).reshape((data.info.height, data.info.width))
+        self.occ_grid_metadata = np.array([
+            data.info.resolution,
+            data.info.width,
+            data.info.height,
+        ])
+        self.occ_grid_origin = np.array([
+            data.info.origin.position.x,
+            data.info.origin.position.y,
+            data.info.origin.position.z,
+            data.info.origin.orientation.x,
+            data.info.origin.orientation.y,
+            data.info.origin.orientation.z,
+            data.info.origin.orientation.w,
+        ])
 
     def _pose_callback(self, data):
         """ """
-        pass
         # TODO Extract current x, y, yaw from pose
         # TODO Reorder waypoints so that next one is in front
+        pose = np.array([
+            data.pose.position.x,
+            data.pose.position.y,
+            data.pose.position.z,
+            data.pose.orientation.x,
+            data.pose.orientation.y,
+            data.pose.orientation.z,
+            data.pose.orientation.w,
+        ])
+        sx = pose[0]
+        sy = pose[1]
+        rotation = Rotation.from_quat(pose[3:])
+        _, _, yaw = rotation.as_euler("xyz", degrees=False)
 
     def __call__(self, *args, **kwargs):
         # self.rate = rospy.Rate(50)
