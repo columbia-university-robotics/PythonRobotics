@@ -20,7 +20,7 @@ from scipy.spatial.transform import Rotation
 from PIL import Image, ImageOps
 
 
-show_animation = False
+show_animation = True
 
 
 class AStarPlanner:
@@ -290,7 +290,7 @@ def convert_im_to_grid(filepath):
 def main():
     print(__file__ + " start!!")
 
-    with open("./map_and_pose/occupancy_grid_test.npy", "rb") as f:
+    with open("./testing_4-19/occupancy_grid.npy", "rb") as f:
         grid = np.load(f)
     with open("./map_and_pose/map_metadata_test.npy", "rb") as f:
         # resolution, width, height
@@ -298,7 +298,7 @@ def main():
     with open("./map_and_pose/map_origin_test.npy", "rb") as f:
         # position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w
         map_origin = np.load(f)
-    with open("./map_and_pose/pose_test.npy", "rb") as f:
+    with open("./testing_4-19/pose.npy", "rb") as f:
         # position.x, position.y, position.z, quaternion.x, quaternion.y, quaternion.z, quaternion.w
         pose = np.load(f)
 
@@ -309,21 +309,20 @@ def main():
     map_width_meters = map_width_voxels * map_resolution
     map_height_meters = map_height_voxels * map_resolution
 
+    # Flip grid
+    grid = grid[::-1, ::-1]
+
     # start position
     sx = pose[0]
     sy = pose[1]
     rotation = Rotation.from_quat(pose[3:])
     _, _, yaw = rotation.as_euler("xyz", degrees=False)
 
-    # # manually set start pose for testing
-    sx += 0.25
-    sy -= 0.05
-
     # set goal position
-    robot_radius = 0.22
-    scaling_factor = robot_radius * 2
-    gx = sx - (math.cos(yaw)) * scaling_factor
-    gy = sy - (math.sin(yaw)) * scaling_factor
+    robot_radius = 0.3
+    scaling_factor = robot_radius * 1.5
+    gx = sx - (math.sin(yaw)) * scaling_factor
+    gy = sy - (math.cos(yaw)) * scaling_factor
 
     midpoint_x = (sx + gx) / 2
     midpoint_y = (sy + gy) / 2
@@ -385,9 +384,8 @@ def main():
     else:
         draw_horizontal()
 
-    # Construct obstacles from grid
     ob = np.argwhere(grid == 100)
-    downsample_factor = 1
+    downsample_factor = 2
     ox, oy = (
         list(ob[::downsample_factor, 0] * map_resolution + map_origin_x),
         list(ob[::downsample_factor, 1] * map_resolution + map_origin_y),
