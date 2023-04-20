@@ -20,8 +20,6 @@ import copy
 import math
 import sys
 import pathlib
-import time
-from scipy.spatial.transform import Rotation
 
 sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
@@ -31,19 +29,18 @@ from CubicSpline import cubic_spline_planner
 SIM_LOOP = 500
 
 # Parameter
-MAX_SPEED = 2.0  # maximum speed [m/s]
-MAX_ACCEL = 10.0  # maximum acceleration [m/ss] # Increase this value for standing start
-MAX_CURVATURE = 22.0  # maximum curvature [1/m]  # Increase this value to run the demo
+MAX_SPEED = 50.0 / 3.6  # maximum speed [m/s]
+MAX_ACCEL = 2.0  # maximum acceleration [m/ss]
+MAX_CURVATURE = 1.0  # maximum curvature [1/m]
 MAX_ROAD_WIDTH = 7.0  # maximum road width [m]
 D_ROAD_W = 1.0  # road width sampling length [m]
 DT = 0.2  # time tick [s]
 MAX_T = 5.0  # max prediction time [m]
 MIN_T = 4.0  # min prediction time [m]
-TARGET_SPEED = 2.0  # target speed [m/s]
+TARGET_SPEED = 30.0 / 3.6  # target speed [m/s]
 D_T_S = 5.0 / 3.6  # target speed sampling length [m/s]
 N_S_SAMPLE = 1  # sampling number of target speed
-ROBOT_RADIUS = 0.2  # robot radius [m]
-DIST_TO_GOAL = 0.1
+ROBOT_RADIUS = 2.0  # robot radius [m]
 
 # cost weights
 K_J = 0.1
@@ -212,77 +209,27 @@ def check_collision(fp, ob):
     return True
 
 
-def check_collision_og(fp, og):
-    for ix, iy in zip(fp.x, fp.y):
-        x = int(ix) + 40
-        y = int(iy) + 40
-
-        collision = any(
-            [
-                og[x + xf, y + yf]
-                for xf in range(-int(ROBOT_RADIUS) - 1, int(ROBOT_RADIUS) + 2)
-                for yf in range(-int(ROBOT_RADIUS) - 1, int(ROBOT_RADIUS) + 2)
-            ]
-        )
-
-        if collision:
-            return False
-
-    return True
-
-
-def check_paths(fplist, og):
+def check_paths(fplist, ob):
     ok_ind = []
     for i, _ in enumerate(fplist):
-        # t0 = time.time()
         if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
-            # print("max speed check fails")
             continue
-        # t1 = time.time()
-        if any([abs(a) > MAX_ACCEL for a in fplist[i].s_dd]):  # Max accel check
-            # print("max accel check fails")
+        elif any([abs(a) > MAX_ACCEL for a in fplist[i].s_dd]):  # Max accel check
             continue
-        # t2 = time.time()
-        if any([abs(c) > MAX_CURVATURE for c in fplist[i].c]):  # Max curvature check
-            # print("max curvature check fails")
+        elif any([abs(c) > MAX_CURVATURE for c in fplist[i].c]):  # Max curvature check
             continue
-        # t3 = time.time()
-        if not check_collision_og(fplist[i], og):
-            # print("collision check fails")
+        elif not check_collision(fplist[i], ob):
             continue
-        # t4 = time.time()
-        # print(f"max speed: {(t1 - t0):3f} max accel: {(t2 - t1):3f} max curve: {(t3 - t2):3f} collision: {(t4 - t3):3f}")
+
         ok_ind.append(i)
 
     return [fplist[i] for i in ok_ind]
 
 
-def frenet_optimal_planning(csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, og):
-    """
-    Parameters
-    ----------
-    csp : CubicSpline2D
-        cubic spline planner
-    s0 : float
-        current course position
-    c_speed : float
-        current speed [m/s]
-    c_accel : float
-        current acceleration [m/ss]
-    c_d : float
-        current lateral position [m]
-    c_d_d : float
-        current lateral speed [m/s]
-    c_d_dd : float
-        corrent lateral acceleration [m/s]
-    """
-    # t0 = time.time()
+def frenet_optimal_planning(csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, ob):
     fplist = calc_frenet_paths(c_speed, c_accel, c_d, c_d_d, c_d_dd, s0)
-    # t1 = time.time()
     fplist = calc_global_paths(fplist, csp)
-    # t2 = time.time()
-    fplist = check_paths(fplist, og)
-    # t3 = time.time()
+    fplist = check_paths(fplist, ob)
 
     # find minimum cost path
     min_cost = float("inf")
@@ -291,22 +238,11 @@ def frenet_optimal_planning(csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, og):
         if min_cost >= fp.cf:
             min_cost = fp.cf
             best_path = fp
-    # t4 = time.time()
-
-    # print(f"calc_frenet_paths: {(t1 - t0):3f} calc_global_paths: {(t2 - t1):3f} check_paths: {(t3 - t2):3f} min_cost_path: {(t4 - t3):3f}")
 
     return best_path
 
 
 def generate_target_course(x, y):
-    """
-    Parameters
-    ----------
-    x : list
-        x coordinates of waypoints
-    y : list
-        y coordinates of waypoints
-    """
     csp = cubic_spline_planner.CubicSpline2D(x, y)
     s = np.arange(0, csp.s[-1], 0.1)
 
@@ -324,62 +260,29 @@ def generate_target_course(x, y):
 def main():
     print(__file__ + " start!!")
 
-    # load way points from a file (reverse and downsample)
-    w_d_f = 10  # waypoint downsample factor
-    wx = np.loadtxt("../rx.numpy")[::-w_d_f]
-    wy = np.loadtxt("../ry.numpy")[::-w_d_f]
+    # way points
+    wx = [0.0, 10.0, 20.5, 35.0, 70.5]
+    wy = [0.0, -6.0, 5.0, 6.5, 0.0]
+    # obstacle lists
+    ob = np.array([[20.0, 10.0], [30.0, 6.0], [30.0, 8.0], [35.0, 8.0], [50.0, 3.0]])
 
-    # Load map and metadata
-    og = np.load("../AStar/testing_4-19/occupancy_grid.npy")
-    map_metadata = np.load("../AStar/map_and_pose/map_metadata_test.npy")
-    map_origin = np.load("../AStar/map_and_pose/map_origin_test.npy")
-    pose = np.load("../AStar/testing_4-19/pose.npy")
-
-    # Flip grid
-    og = og[::-1, ::-1]
-
-    # Unpack
-    og = np.where(og == 100, 1.0, 0.0)
-    map_origin_x, map_origin_y, *_ = map_origin
-    map_resolution, map_width, _ = map_metadata
-
-    # Start position from pose
-    sx = pose[0]
-    sy = pose[1]
-    rotation = Rotation.from_quat(pose[3:])
-    _, _, yaw = rotation.as_euler("xyz", degrees=False)
-
-    # Construct obstacles from grid for visualization
-    o_d_f = 10  # obstacles_downsample_factor
-    ob = np.argwhere(og == 1.0)
-    ob = np.stack(
-        [
-            ob[:, 0] * map_resolution + map_origin_x,
-            ob[:, 1] * map_resolution + map_origin_y,
-        ],
-        axis=-1,
-    )
-    ob = ob[::o_d_f]
-
-    tx, ty, _, _, csp = generate_target_course(wx, wy)
+    tx, ty, tyaw, tc, csp = generate_target_course(wx, wy)
 
     # initial state
-    c_speed = 0.0  # 10.0 / 3.6  # current speed [m/s]
+    c_speed = 10.0 / 3.6  # current speed [m/s]
     c_accel = 0.0  # current acceleration [m/ss]
-    c_d = 0.0  # current lateral position, in reference to first waypoint [m]
+    c_d = -2.5  # current lateral position [m]
     c_d_d = 0.0  # current lateral speed [m/s]
     c_d_dd = 0.0  # current lateral acceleration [m/s]
-    s0 = 0  # current course position, in reference to the sequence of positions
+    s0 = 10.0  # current course position
 
-    area = map_width * map_resolution / 2  # animation area length [m]
-    area = 1
+    area = 20.0  # animation area length [m]
 
     for i in range(SIM_LOOP):
         path = frenet_optimal_planning(
-            csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, og
+            csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, ob
         )
 
-        # Go to next state based on path
         s0 = path.s[1]
         c_d = path.d[1]
         c_d_d = path.d_d[1]
@@ -387,14 +290,7 @@ def main():
         c_speed = path.s_d[1]
         c_accel = path.s_dd[1]
 
-        vesc_output = (
-            c_speed,  # speed TODO: scale to our range
-            path.yaw[
-                1
-            ],  # yaw (relative to world or starting postion) TODO: scale to our range
-        )
-
-        if np.hypot(path.x[1] - tx[-1], path.y[1] - ty[-1]) <= DIST_TO_GOAL:
+        if np.hypot(path.x[1] - tx[-1], path.y[1] - ty[-1]) <= 1.0:
             print("Goal")
             break
 
@@ -405,16 +301,15 @@ def main():
                 "key_release_event",
                 lambda event: [exit(0) if event.key == "escape" else None],
             )
-            plt.plot(wx, wy, "-og")
             plt.plot(tx, ty)
             plt.plot(ob[:, 0], ob[:, 1], "xk")
             plt.plot(path.x[1:], path.y[1:], "-or")
             plt.plot(path.x[1], path.y[1], "vc")
             plt.xlim(path.x[1] - area, path.x[1] + area)
             plt.ylim(path.y[1] - area, path.y[1] + area)
-            plt.title(f"v[m/s]: {c_speed:0.3f} | yaw: {path.yaw[1]:0.3f}")
+            plt.title("v[km/h]:" + str(c_speed * 3.6)[0:4])
             plt.grid(True)
-            plt.pause(0.2)
+            plt.pause(0.0001)
 
     print("Finish")
     if show_animation:  # pragma: no cover

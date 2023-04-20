@@ -20,7 +20,6 @@ import copy
 import math
 import sys
 import pathlib
-import time
 from scipy.spatial.transform import Rotation
 
 # import rospy
@@ -30,21 +29,25 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent))
 from QuinticPolynomialsPlanner.quintic_polynomials_planner import QuinticPolynomial
 from CubicSpline import cubic_spline_planner
 
+# Sim Params
 SIM_LOOP = 500
+SIM_WINDOW_OFFSET = 3
+OB_D_F = 4  # obstacles downsample factor
 
 # Parameter
-MAX_SPEED = 50.0 / 3.6  # maximum speed [m/s]
+MAX_SPEED = 2.0  # maximum speed [m/s]
 MAX_ACCEL = 10.0  # maximum acceleration [m/ss] # Increase this value for standing start
-MAX_CURVATURE = 5.0  # maximum curvature [1/m]  # Increase this value to run the demo
+MAX_CURVATURE = 22.0  # maximum curvature [1/m]  # Increase this value to run the demo
 MAX_ROAD_WIDTH = 7.0  # maximum road width [m]
 D_ROAD_W = 1.0  # road width sampling length [m]
-DT = 0.2  # time tick [s]
-MAX_T = 5.0  # max prediction time [m]
-MIN_T = 4.0  # min prediction time [m]
-TARGET_SPEED = 30.0 / 3.6  # target speed [m/s]
+DT = 0.25  # time tick [s]
+MAX_T = 2.0  # max prediction time [m]
+MIN_T = 1.0  # min prediction time [m]
+TARGET_SPEED = 1.8  # target speed [m/s]
 D_T_S = 5.0 / 3.6  # target speed sampling length [m/s]
 N_S_SAMPLE = 1  # sampling number of target speed
-ROBOT_RADIUS = 2.0  # robot radius [m]
+ROBOT_RADIUS = 0.2  # robot radius [m]
+DIST_TO_GOAL = 0.1
 
 # cost weights
 K_J = 0.1
@@ -53,7 +56,9 @@ K_D = 1.0
 K_LAT = 1.0
 K_LON = 1.0
 
-global ob  # this is here so the animation can plot the obstacles
+WP_D_F = 5  # waypoint downsample factor
+
+ob = None
 
 
 class QuarticPolynomial:
@@ -214,9 +219,11 @@ def check_collision_ob(fp, ob):
 
 
 def check_collision_og(fp, og):
+    og, (og_resolution, _, _), (og_origin_x, og_origin_y, *_) = og
+    og_resolution = round(og_resolution, 5)
     for ix, iy in zip(fp.x, fp.y):
-        x = int(ix) + 40
-        y = int(iy) + 40
+        x = int((ix - og_origin_x) / og_resolution)
+        y = int((iy - og_origin_y) / og_resolution)
 
         collision = any(
             [
@@ -235,24 +242,14 @@ def check_collision_og(fp, og):
 def check_paths(fplist, og):
     ok_ind = []
     for i, _ in enumerate(fplist):
-        # t0 = time.time()
         if any([v > MAX_SPEED for v in fplist[i].s_d]):  # Max speed check
-            # print("max speed check fails")
             continue
-        # t1 = time.time()
         if any([abs(a) > MAX_ACCEL for a in fplist[i].s_dd]):  # Max accel check
-            # print("max accel check fails")
             continue
-        # t2 = time.time()
         if any([abs(c) > MAX_CURVATURE for c in fplist[i].c]):  # Max curvature check
-            # print("max curvature check fails")
             continue
-        # t3 = time.time()
         if not check_collision_og(fplist[i], og):
-            # print("collision check fails")
             continue
-        # t4 = time.time()
-        # print(f"max speed: {(t1 - t0):3f} max accel: {(t2 - t1):3f} max curve: {(t3 - t2):3f} collision: {(t4 - t3):3f}")
         ok_ind.append(i)
 
     return [fplist[i] for i in ok_ind]
@@ -277,13 +274,9 @@ def frenet_optimal_planning(csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, og):
     c_d_dd : float
         corrent lateral acceleration [m/s]
     """
-    # t0 = time.time()
     fplist = calc_frenet_paths(c_speed, c_accel, c_d, c_d_d, c_d_dd, s0)
-    # t1 = time.time()
     fplist = calc_global_paths(fplist, csp)
-    # t2 = time.time()
     fplist = check_paths(fplist, og)
-    # t3 = time.time()
 
     # find minimum cost path
     min_cost = float("inf")
@@ -292,9 +285,6 @@ def frenet_optimal_planning(csp, s0, c_speed, c_accel, c_d, c_d_d, c_d_dd, og):
         if min_cost >= fp.cf:
             min_cost = fp.cf
             best_path = fp
-    # t4 = time.time()
-
-    # print(f"calc_frenet_paths: {(t1 - t0):3f} calc_global_paths: {(t2 - t1):3f} check_paths: {(t3 - t2):3f} min_cost_path: {(t4 - t3):3f}")
 
     return best_path
 
@@ -323,7 +313,9 @@ def generate_target_course(x, y):
 
 
 class FrenetPlanner:
-    def __init__(self, wx, wy, occ_grid) -> None:
+    def __init__(
+        self, initial_pose, wx, wy, occ_grid, occ_grid_metadata, occ_grid_origin
+    ) -> None:
         self.c_speed = 0.0  # current speed [m/s]
         self.c_accel = 0.0  # current acceleration [m/ss]
         self.c_d = 0.0  # current lateral position [m]
@@ -332,12 +324,14 @@ class FrenetPlanner:
         self.s0 = 0.0  # current course position
         self.yaw = math.pi / 2  # current yaw [rad]
 
+        self.pose = initial_pose
+
         self.wx = wx  # x-coord waypoints
         self.wy = wy  # y-coord waypoints
 
         self.occ_grid = occ_grid  # occupancy grid
-        self.occ_grid_metadata = np.zeros(3)
-        self.occ_grid_origin = np.zeros(7)
+        self.occ_grid_metadata = occ_grid_metadata
+        self.occ_grid_origin = occ_grid_origin
 
         self.show_animation = True
 
@@ -352,57 +346,83 @@ class FrenetPlanner:
         """ """
         # TODO Fit the map data to the self.occ_grid data structure
         self.occ_grid = np.array(data.data).reshape((data.info.height, data.info.width))
-        self.occ_grid_metadata = np.array([
-            data.info.resolution,
-            data.info.width,
-            data.info.height,
-        ])
-        self.occ_grid_origin = np.array([
-            data.info.origin.position.x,
-            data.info.origin.position.y,
-            data.info.origin.position.z,
-            data.info.origin.orientation.x,
-            data.info.origin.orientation.y,
-            data.info.origin.orientation.z,
-            data.info.origin.orientation.w,
-        ])
+        self.occ_grid_metadata = np.array(
+            [
+                data.info.resolution,
+                data.info.width,
+                data.info.height,
+            ]
+        )
+        self.occ_grid_origin = np.array(
+            [
+                data.info.origin.position.x,
+                data.info.origin.position.y,
+                data.info.origin.position.z,
+                data.info.origin.orientation.x,
+                data.info.origin.orientation.y,
+                data.info.origin.orientation.z,
+                data.info.origin.orientation.w,
+            ]
+        )
 
     def _pose_callback(self, data):
         """ """
-        # TODO Extract current x, y, yaw from pose
-        # TODO Reorder waypoints so that next one is in front
-        pose = np.array([
-            data.pose.position.x,
-            data.pose.position.y,
-            data.pose.position.z,
-            data.pose.orientation.x,
-            data.pose.orientation.y,
-            data.pose.orientation.z,
-            data.pose.orientation.w,
-        ])
-        sx = pose[0]
-        sy = pose[1]
-        rotation = Rotation.from_quat(pose[3:])
-        _, _, yaw = rotation.as_euler("xyz", degrees=False)
+        # pose = np.array([
+        #     data.pose.position.x,
+        #     data.pose.position.y,
+        #     data.pose.position.z,
+        #     data.pose.orientation.x,
+        #     data.pose.orientation.y,
+        #     data.pose.orientation.z,
+        #     data.pose.orientation.w,
+        # ])
+        # sx = pose[0]
+        # sy = pose[1]
+        # rotation = Rotation.from_quat(pose[3:])
+        # _, _, yaw = rotation.as_euler("xyz", degrees=False)
+
+        x, y, yaw = self.pose
+        self.x = x
+        self.y = y
+        self.yaw = yaw
+
+        # Find closest waypoint
+        idx = 0
+        min_diff = np.inf
+        for i, (wx, wy) in enumerate(zip(self.wx, self.wy)):
+            diff = np.hypot(wx - x, wy - y)
+            if diff < min_diff:
+                idx = i
+                min_diff = diff
+
+        # Move through waypoints
+        self.wx = np.concatenate((self.wx[idx:], self.wx[:idx]), axis=0)
+        self.wy = np.concatenate((self.wy[idx:], self.wy[:idx]), axis=0)
 
     def __call__(self, *args, **kwargs):
-        # self.rate = rospy.Rate(50)
+        global ob
+        # self.rate = rospy.Rate(2)
 
         # while not rospy.is_shutdown():
-        while True:
+        for i in range(SIM_LOOP):
+            # Must simluate callback getting called
+            if i % 3 == 0:
+                self._pose_callback(None)
+
             csp = cubic_spline_planner.CubicSpline2D(self.wx, self.wy)
 
             path = frenet_optimal_planning(
                 csp,
-                self.s0,
+                0,  # current course position (in reference to spline path)
                 self.c_speed,
                 self.c_accel,
-                self.c_d,
+                self.c_d,  # current lateral position (orthogonal to spline path)
                 self.c_d_d,
                 self.c_d_dd,
-                self.occ_grid,
+                (self.occ_grid, self.occ_grid_metadata, self.occ_grid_origin),
             )
 
+            # Move to next position
             self.s0 = path.s[1]
             self.c_speed = path.s_d[1]
             self.c_accel = path.s_dd[1]
@@ -410,9 +430,11 @@ class FrenetPlanner:
             self.c_d_d = path.d_d[1]
             self.c_d_dd = path.d_dd[1]
 
+            # Update pose for sim
+            self.pose = (path.x[1], path.y[1], path.yaw[1])
+
             # TODO Deal with speed and steering angle
             speed, yaw = path.s_d[1], path.yaw[1]
-            print(speed, yaw)
 
             if self.show_animation:  # pragma: no cover
                 plt.cla()
@@ -422,14 +444,14 @@ class FrenetPlanner:
                     lambda event: [exit(0) if event.key == "escape" else None],
                 )
                 plt.plot(self.wx, self.wy, "-og")
-                plt.plot(ob[:, 0], ob[:, 1], "xk")
+                plt.plot(ob[:, 0], ob[:, 1], "sk", markersize=0.8)
                 plt.plot(path.x[1:], path.y[1:], "-or")
                 plt.plot(path.x[1], path.y[1], "vc")
-                plt.xlim(path.x[1] - 60.0, path.x[1] + 60.0)
-                plt.ylim(path.y[1] - 60.0, path.y[1] + 60.0)
+                plt.xlim(path.x[1] - SIM_WINDOW_OFFSET, path.x[1] + SIM_WINDOW_OFFSET)
+                plt.ylim(path.y[1] - SIM_WINDOW_OFFSET, path.y[1] + SIM_WINDOW_OFFSET)
                 plt.title(f"v[m/s]: {speed:0.3f} | yaw: {yaw:0.3f}")
                 plt.grid(True)
-                plt.pause(0.0001)
+                plt.pause(0.1)
 
         print("Finish")
         if self.show_animation:  # pragma: no cover
@@ -440,17 +462,41 @@ class FrenetPlanner:
 
 if __name__ == "__main__":
     # load way points from a file
-    wx = np.loadtxt("../rx.numpy")[::-4]
-    wy = np.loadtxt("../ry.numpy")[::-4]
+    wx = np.loadtxt("../rx.numpy")[::-WP_D_F]
+    wy = np.loadtxt("../ry.numpy")[::-WP_D_F]
 
-    # create occupancy grid from obstacles (2D pointcloud)
-    ob = np.loadtxt("../ob.numpy")
-    ob_og_x_offset, ob_og_y_offset = 40, 40
-    og = np.zeros((200, 200))
-    for i in range(len(ob)):
-        xi, yi = ob[i]
-        og[int(xi + ob_og_x_offset), int(yi + ob_og_y_offset)] = 1.0
+    # Load map and metadata
+    og = np.load("../AStar/testing_4-19/occupancy_grid.npy")
+    map_metadata = np.load("../AStar/map_and_pose/map_metadata_test.npy")
+    map_origin = np.load("../AStar/map_and_pose/map_origin_test.npy")
+    initial_pose = np.load("../AStar/testing_4-19/pose.npy")
+
+    # Flip grid
+    og = og[::-1, ::-1]
+
+    # Unpack
+    og = np.where(og == 100, 1.0, 0.0)
+    map_origin_x, map_origin_y, *_ = map_origin
+    map_resolution, map_width, map_height = map_metadata
+
+    # Start position from initial pose
+    sx = initial_pose[0]
+    sy = initial_pose[1]
+    rotation = Rotation.from_quat(initial_pose[3:])
+    _, _, yaw = rotation.as_euler("xyz", degrees=False)
+    initial_pose = (sx, sy, yaw)
+
+    # Construct obstacles from grid for visualization
+    ob = np.argwhere(og == 1.0)
+    ob = np.stack(
+        [
+            ob[:, 0] * map_resolution + map_origin_x,
+            ob[:, 1] * map_resolution + map_origin_y,
+        ],
+        axis=-1,
+    )
+    ob = ob[::OB_D_F]
 
     # Create and run planner
-    planner = FrenetPlanner(wx, wy, og)
+    planner = FrenetPlanner(initial_pose, wx, wy, og, map_metadata, map_origin)
     planner()
